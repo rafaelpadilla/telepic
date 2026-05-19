@@ -20,11 +20,31 @@ jobs:
           ref: ${{ github.event.release.tag_name }}
 
       - name: Set package version from release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG#v}"
+          # Strip optional leading "v" (v0.1.3 -> 0.1.3). Do not use sed here: GNU sed
+          # treats "\0" in replacements like version = "0.1.3" as a backreference.
+          VERSION="${RELEASE_TAG#v}"
+          export VERSION
           echo "Publishing version: ${VERSION}"
-          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
+          python3 -c "
+          import os, re, sys
+          from pathlib import Path
+
+          version = os.environ['VERSION']
+          path = Path('pyproject.toml')
+          text = path.read_text()
+          new_text, count = re.subn(
+              r'(?m)^version = \"[^\"]*\"',
+              f'version = \"{version}\"',
+              text,
+              count=1,
+          )
+          if count != 1:
+              sys.exit('Expected exactly one version line in pyproject.toml')
+          path.write_text(new_text)
+          "
 
       - name: Set up Python
         uses: actions/setup-python@v5
